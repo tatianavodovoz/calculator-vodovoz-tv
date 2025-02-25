@@ -1,6 +1,6 @@
-.idea/
-googletest/
-build/
-__pycache__/
+*.o
+*.out
+*.exe
 
-calculator.exe
+build/
+googletest/
