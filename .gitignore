@@ -1,0 +1,6 @@
+.idea/
+googletest/
+build/
+__pycache__/
+
+calculator.exe
