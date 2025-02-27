@@ -21,9 +21,14 @@ TEST_OBJ = $(BUILD_DIR)/tests.o $(BUILD_DIR)/calculator.o
 TEST_EXE = $(BUILD_DIR)/unit-tests.exe
 
 # GoogleTest files
-GTEST_DIR = googletest
-GTEST_BUILD = $(GTEST_DIR)/build
-GTEST_LIB = $(GTEST_BUILD)/lib/libgtest.a
+
+GTEST_DIR := googletest/googletest
+GTEST_SRC_DIR := $(GTEST_DIR)/src
+GTEST_HEADERS := $(GTEST_DIR)/include/gtest/*.h $(GTEST_DIR)/include/gtest/internal/*.h
+GTEST_BUILD_DIR := $(BUILD_DIR)/gtest
+GTEST_ALL_OBJ  := $(GTEST_BUILD_DIR)/gtest-all.o
+GTEST_MAIN_OBJ := $(GTEST_BUILD_DIR)/gtest_main.o
+GTEST_MAIN_A   := $(GTEST_BUILD_DIR)/gtest_main.a
 
 # Formatting configuration
 FORMAT_DIRS = $(SRC_DIR) $(UNIT_TESTS_DIR)
@@ -54,13 +59,22 @@ $(BUILD_DIR)/calculator.o: $(SRC_DIR)/calculator.c
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-# GoogleTest download and build
-$(GTEST_DIR)/CMakeLists.txt:
-	git clone https://github.com/google/googletest.git $(GTEST_DIR)
 
-$(GTEST_LIB): $(GTEST_DIR)/CMakeLists.txt
-	mkdir -p $(GTEST_BUILD)
-	cd $(GTEST_BUILD) && cmake .. && make
+
+# Сборка Google Test
+$(GTEST_ALL_OBJ): $(GTEST_SRC_DIR)/gtest-all.cc $(GTEST_HEADERS)
+	@echo "Building gtest-all.o"
+	@mkdir -p $(GTEST_BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -isystem $(GTEST_DIR)/include -I$(GTEST_DIR) -c $< -o $@
+
+$(GTEST_MAIN_OBJ): $(GTEST_SRC_DIR)/gtest_main.cc $(GTEST_HEADERS)
+	@echo "Building gtest_main.o"
+	@mkdir -p $(GTEST_BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -isystem $(GTEST_DIR)/include -I$(GTEST_DIR) -c $< -o $@
+
+$(GTEST_MAIN_A): $(GTEST_ALL_OBJ) $(GTEST_MAIN_OBJ)
+	@echo "Archiving gtest_main.a"
+	ar rcs $@ $^
 
 # Build unit tests
 $(TEST_EXE): $(TEST_OBJ) $(GTEST_LIB)
