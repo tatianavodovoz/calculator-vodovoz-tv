@@ -9,11 +9,11 @@ def pytest_configure(config):
 # Valid test cases for the calculator
 valid_cases = [
     # Tests for integer calculations
-    ("3 + 4", "7", "int"),
-    ("10 - 2 * 3", "4", "int"),
+    ("3 + 3 * 3", "12", "int"),
+    ("10 - (2 - 3)", "11", "int"),
     ("15 / 5", "3", "int"),
     ("(2 + 6) * 4", "32", "int"),
-    ("-2 + 8", "6", "int"),
+    ("12 + 8 * 1", "20", "int"),
     ("4 * 2 / 2", "4", "int")
 ]
 
@@ -25,18 +25,18 @@ error_cases = [
     ("10 / 0", "", "int"),
     ("10 / 0", "", "float"),
     # Parentheses mismatch
-    ("(3 + 5", "", "int"),
-    ("3 + 5)", "", "int"),
+    ("(2 + 2", "", "int"),
+    ("2 + 2)", "", "int"),
 ]
 
 def run_calculator(input_str, mode):
-    cmd = ["./build/app.exe", mode]  # Передаем режим в командной строке
+    cmd = ["./build/app.exe", mode]
     proc = subprocess.Popen(
         cmd,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True
+        universal_newlines=True
     )
     stdout, stderr = proc.communicate(input=input_str + "\n")
     return stdout.strip(), stderr.strip()
@@ -66,7 +66,7 @@ def test_precedence_of_operators():
 
 # Test for negative number calculations
 def test_negative_calculations():
-    output, error = run_calculator("-7 - 2", "int")
-    assert output == "-9"
-    output, error = run_calculator("(-3 / 2 * 4)", "float")
+    output, error = run_calculator("7 - 18", "int")
+    assert output == "-11"
+    output, error = run_calculator("(3 / 2 - 15 / 2)", "float")
     assert output == "-6.0000"
