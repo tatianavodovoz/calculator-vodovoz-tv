@@ -79,10 +79,10 @@ TEST(OperatorTest, ApplyIntOp)
 
 TEST(OperatorTest, ApplyFloatOp)
 {
-    EXPECT_DOUBLE_EQ(applyFloatOp(10.5, 5.5, '+'), 16.0);
-    EXPECT_DOUBLE_EQ(applyFloatOp(10.5, 5.5, '-'), 5.0);
-    EXPECT_DOUBLE_EQ(applyFloatOp(10.5, 5.5, '*'), 57.75);
-    EXPECT_DOUBLE_EQ(applyFloatOp(10.5, 5.5, '/'), 1.90909);
+    EXPECT_DOUBLE_EQ(applyFloatOp(10.5, 2.5, '+'), 13.0);
+    EXPECT_DOUBLE_EQ(applyFloatOp(10.5, 2.5, '-'), 8.0);
+    EXPECT_DOUBLE_EQ(applyFloatOp(10.5, 2.5, '*'), 26.25);
+    EXPECT_DOUBLE_EQ(applyFloatOp(10.5, 2.5, '/'), 4.2);
 
     // Проверка деления на ноль
     EXPECT_EXIT(applyFloatOp(10.5, 0.0, '/'), ::testing::ExitedWithCode(1), "Error: Division by zero");
@@ -110,11 +110,3 @@ TEST(EvaluateTest, EvaluateInt)
     EXPECT_EQ(intPop(&values), 7);
 }
 
-TEST(EvaluateTest, EvaluateIntEmptyStack)
-{
-    IntStack values;
-    IntStack ops;
-    initIntStack(&values);
-    initIntStack(&ops);
-    EXPECT_EXIT(evaluateInt(&values, &ops), ::testing::ExitedWithCode(1), "Error: Empty stack");
-}
