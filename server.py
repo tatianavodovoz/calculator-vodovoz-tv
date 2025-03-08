@@ -19,28 +19,27 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
             content_type = self.headers.get('Content-Type', '')
             if content_type != 'application/json':
                 self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
                 self.end_headers()
+                self.wfile.write(json.dumps("Invalid content type").encode('utf-8'))
                 return
             
             try:
-                # Parse query parameters
+                
                 parsed_url = urlparse(self.path)
                 query_params = parse_qs(parsed_url.query)
                 float_mode = query_params.get('float', ['false'])[0].lower() in ['true', '1', 'yes']
                 
-                # Parse JSON body
-                content_length = int(self.headers.get('Content-Length', 0))
-                body = self.rfile.read(content_length).decode('utf-8')
                 
-                # Validate JSON structure
-                try:
-                    expression = json.loads(body)
-                except json.JSONDecodeError as e:
+                content_length = int(self.headers.get('Content-Length', 0))
+                if content_length == 0:
                     self.send_response(500)
-                    self.send_header('Content-Type', 'application/json; charset=utf-8')
+                    self.send_header('Content-Type', 'application/json')
                     self.end_headers()
-                    self.wfile.write(json.dumps("Invalid JSON format").encode('utf-8'))
+                    self.wfile.write(json.dumps("Empty request body").encode())
                     return
+                body = self.rfile.read(content_length).decode('utf-8')
+                expression = json.loads(body)
                 
                 if not isinstance(expression, str):
                     self.send_response(500)
@@ -49,7 +48,7 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
                     self.wfile.write(json.dumps("Expression must be a string").encode('utf-8'))
                     return
                 
-                # Prepare command
+                # ÐŸÐ¾Ð´Ð³Ð¾Ñ‚Ð¾Ð²ÐºÐ° ÐºÐ¾Ð¼Ð°Ð½Ð´Ñ‹
                 app_path = os.path.abspath(os.path.join('build', 'app.exe'))
                 if not os.path.exists(app_path):
                     self.send_response(500)
@@ -61,7 +60,7 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
                 mode = 'float' if float_mode else 'int'
                 cmd = [app_path, mode, expression]
                 
-                # Execute calculator with timeout
+                # Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ Ñ� Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚Ð¾Ð¼
                 try:
                     result = subprocess.run(
                         cmd,
@@ -69,31 +68,43 @@ class MyHTTPRequestHandler(BaseHTTPRequestHandler):
                         text=True,
                         timeout=5
                     )
-                except subprocess.TimeoutExpired as e:
+                except subprocess.TimeoutExpired:
                     self.send_response(500)
                     self.send_header('Content-Type', 'application/json; charset=utf-8')
                     self.end_headers()
                     self.wfile.write(json.dumps("Calculation timeout").encode('utf-8'))
                     return
-                
-                # Handle results
-                if result.returncode != 0 or not result.stdout.strip():
+
+                # ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ð¾Ð²
+                if result.returncode == 0:
+                    output = result.stdout.strip()
+                    if output:
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json; charset=utf-8')
+                        self.end_headers()
+                        self.wfile.write(json.dumps(output).encode('utf-8'))
+                    else:
+                        self.send_response(500)
+                        self.send_header('Content-Type', 'application/json; charset=utf-8')
+                        self.end_headers()
+                        self.wfile.write(json.dumps("No result produced").encode('utf-8'))
+                else:
+                    error_msg = result.stderr.strip() or "Calculation failed"
                     self.send_response(500)
                     self.send_header('Content-Type', 'application/json; charset=utf-8')
                     self.end_headers()
-                    error_msg = result.stderr.strip() or "Unknown calculation error"
                     self.wfile.write(json.dumps(error_msg).encode('utf-8'))
-                    return
-                
-                self.send_response(200)
+
+            except json.JSONDecodeError:
+                self.send_response(500)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
                 self.end_headers()
-                self.wfile.write(json.dumps(result.stdout.strip()).encode('utf-8'))
+                self.wfile.write(json.dumps("Invalid JSON format").encode('utf-8'))
             except Exception as e:
-                    self.send_response(500)
-                    self.send_header('Content-Type', 'application/json; charset=utf-8')
-                    self.end_headers()
-                    self.wfile.write(json.dumps(str(e)).encode('utf-8'))
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(str(e)).encode('utf-8'))
 
 def run_server(port=8000):
     server_address = ('', port)
@@ -103,4 +114,3 @@ def run_server(port=8000):
 
 if __name__ == '__main__':
     run_server()
-
