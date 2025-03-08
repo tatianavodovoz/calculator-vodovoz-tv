@@ -1,10 +1,14 @@
 #include "calculator.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 
 #ifndef UNIT_TEST
 int main(int argc, char* argv[])
 {
     if (argc < 3) {
-        fprintf(stderr, "Usage: %s <mode>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <mode> <expression>\n", argv[0]);
         return 1;
     }
 
@@ -16,28 +20,54 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    char* expression=argv[2];
+    char* expression = argv[2];
 
-    // Check for valid characters
+    // Check for valid characters and initial conditions
+    int lastWasOperator = 1; // Start with true to allow a number at the start
+    int openBrackets = 0;
+
     for (char* p = expression; *p; p++) {
-        if (!isdigit(*p) && !strchr("()*+/- \n", *p)) {
+        if (isspace(*p))
+            continue; // Skip whitespace
+
+        if (isdigit(*p)) {
+            lastWasOperator = 0; // We found a number
+            while (isdigit(*p)) {
+                p++;
+            }
+            if (*p == '.') { // If we encounter a decimal point, it's an error
+                fprintf(stderr, "Error: Invalid character - floating point number detected\n");
+                return 1;
+            }
+            p--; // Adjust for the loop increment
+        } else if (*p == '(') {
+            openBrackets++;
+            lastWasOperator = 1; // Reset, as '(' is not an operator
+        } else if (*p == ')') {
+            if (lastWasOperator) { // If the last was an operator, it's an error
+                fprintf(stderr, "Error: Unexpected closing parenthesis\n");
+                return 1;
+            }
+            openBrackets--;
+        } else if (strchr("+-*/", *p)) {
+            if (lastWasOperator) { // If the last was also an operator, it's an error
+                fprintf(stderr, "Error: Two consecutive operators\n");
+                return 1;
+            }
+            lastWasOperator = 1; // We found an operator
+        } else {
             fprintf(stderr, "Error: Invalid character\n");
             return 1; // Return code not equal to 0
         }
     }
 
-    // Проверка на количество скобок
-    int openBrackets = 0;
-    int closeBrackets = 0;
-    for (char* p = expression; *p; p++) {
-        if (*p == '(')
-            openBrackets++;
-        if (*p == ')')
-            closeBrackets++;
+    if (openBrackets != 0) {
+        fprintf(stderr, "Error: Mismatched parentheses\n");
+        return 1;
     }
 
-    if (openBrackets != closeBrackets) {
-        fprintf(stderr, "Error: Mismatched parentheses\n");
+    if (lastWasOperator) { // If the expression ends with an operator, it's an error
+        fprintf(stderr, "Error: Expression cannot end with an operator\n");
         return 1;
     }
 
@@ -53,70 +83,38 @@ int main(int argc, char* argv[])
         if (isspace(*p))
             continue; // Skip whitespace
 
-        if (isdigit(*p) || (*p == '.')) {
+        if (isdigit(*p)) {
             if (isFloatMode) {
-                double num = 0.0;
-                double decimalPlace = 1.0;
-                int isDecimal = 0;
-
-                while (isdigit(*p) || (*p == '.' && !isDecimal)) {
-                    if (*p == '.') {
-                        isDecimal = 1;
-                    } else {
-                        num = num * 10 + (*p - '0');
-                        if (isDecimal) {
-                            decimalPlace *= 10.0;
-                        }
-                    }
-                    p++;
-                }
-                if (isDecimal) {
-                    num /= decimalPlace;
-                }
-                floatPush(&floatValues, num);
-                p--; // Adjust for the loop increment
-            } else {
-                int num = 0;
-                while (isdigit(*p)) {
-                    num = num * 10 + (*p - '0');
-                    p++;
-                }
-                intPush(&intValues, num);
-                p--; // Adjust for the loop increment
+                fprintf(stderr, "Error: Invalid character - floating point number detected\n");
+                return 1; // We can't have floats in float mode
             }
+            int num = 0;
+            while (isdigit(*p)) {
+                num = num * 10 + (*p - '0');
+                p++;
+            }
+            intPush(&intValues, num);
+            p--; // Adjust for the loop increment
         } else if (*p == '(') {
             intPush(&intOps, *p);
         } else if (*p == ')') {
             while (!isIntEmpty(&intOps) && intOps.items[intOps.top] != '(') {
-                if (isFloatMode)
-                    evaluateFloat(&floatValues, &intOps);
-                else
-                    evaluateInt(&intValues, &intOps);
+                evaluateInt(&intValues, &intOps);
             }
             intPop(&intOps); // Remove '(' from stack
         } else { // Operator
             while (!isIntEmpty(&intOps) && precedence(intPeek(&intOps)) >= precedence(*p)) {
-                if (isFloatMode)
-                    evaluateFloat(&floatValues, &intOps);
-                else
-                    evaluateInt(&intValues, &intOps);
+                evaluateInt(&intValues, &intOps);
             }
             intPush(&intOps, *p);
         }
     }
 
     while (!isIntEmpty(&intOps)) {
-        if (isFloatMode)
-            evaluateFloat(&floatValues, &intOps);
-        else
-            evaluateInt(&intValues, &intOps);
+        evaluateInt(&intValues, &intOps);
     }
 
-    if (isFloatMode) {
-        printf("%.4f\n", floatPop(&floatValues));
-    } else {
-        printf("%d\n", intPop(&intValues));
-    }
+    printf("%d\n", intPop(&intValues));
 
     return 0;
 }
