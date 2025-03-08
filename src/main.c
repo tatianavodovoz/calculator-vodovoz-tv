@@ -3,7 +3,7 @@
 #ifndef UNIT_TEST
 int main(int argc, char* argv[])
 {
-    if (argc < 2) {
+    if (argc < 3) {
         fprintf(stderr, "Usage: %s <mode>\n", argv[0]);
         return 1;
     }
@@ -16,8 +16,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    char expression[MAX];
-    fgets(expression, MAX, stdin);
+    char* expression=argv[2];
 
     // Check for valid characters
     for (char* p = expression; *p; p++) {
