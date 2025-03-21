@@ -41,7 +41,7 @@ The server consists of the following main components:
 - Error Handling: The server manages various scenarios, including timeouts and error messages.
 - Logging: The server uses structlog for logging events, providing formatted logs in the console and JSON format.
 
-## Daily Task Report
+## Daily Task Report - server
 
 ### DZTVP-4 (07/03/2025)
 **Task**: 
@@ -82,6 +82,8 @@ Successfully set up a logging system for the Python server using the `structlog`
   - Informative logs that are easy to read, with timestamps, log levels, and messages.
   - Implementation of JSON logging for easier monitoring and analysis, enhancing the server's observability and debugging capabilities.
   
+## Daily Task Report - gui
+
 ### DZTVP-11 (19/03/2025)
 **Task**: 
 Implement a mathematical expression validator. 
@@ -108,19 +110,20 @@ Created the `CalculatorClient` class to represent the main application window. T
   
 ![Finite State Machine](finite_state_machine_calc.jpg)
 
-##Finite State Machine for Calculator
-###States
+## Finite State Machine for Calculator
+
+### States
 - **Initial State**: The initial state when the application is ready for input.
 - **Validating Expression**: The state where the application checks the entered mathematical expression.
 - **Error State**: The state where the application displays an error message.
 - **Sending Request to Server**: The state where the application sends a request to the server for calculation.
 - **Displaying Result**: The state where the application displays the result of the calculation.
 
-###Transitions
+### Transitions
 **Initial State**:
 User enters expression → Transition to Validating Expression state.
 
-**Validating Expression*:
+**Validating Expression**:
 Valid → Transition to Sending Request to Server state.
 Invalid → Transition to Error State.
 
