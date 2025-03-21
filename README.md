@@ -43,19 +43,19 @@ The server consists of the following main components:
 
 ## Daily Task Report
 
-### DZTVP-4
+### DZTVP-4 (07/03/2025)
 **Task**: 
 Set up the development environment for the Python server.
 **Results**: 
 Successfully installed Python and verified that all necessary libraries (e.g., `json`, `subprocess`) are available. The development environment is now fully prepared for further development.
 
-### DZTVP-5
+### DZTVP-5(07/03/2025)
 **Task**: 
 Create the basic structure of the server.
 **Results**: 
 Created the `server.py` file and set up a basic HTTP server that listens on the specified port. Implemented a handler for the root URL, which successfully returns "Hello, World!" when accessed. The server structure is now in place for handling requests.
 
-### DZTVP-6
+### DZTVP-6 (08/03/2025)
 **Task**: 
 Implement interaction with the calculator.
 **Results**: 
@@ -65,7 +65,7 @@ Developed a function to run the calculator and handle its results effectively. T
   - Provides a message indicating that the result was not obtained if the return code is 0 but the result is missing.
   - Implemented timeout handling for the calculator execution, ensuring that errors are returned if the execution exceeds the specified time limit.
 
-### DZTVP-7
+### DZTVP-7 (08/03/2025)
 **Task**: 
 Implement server response generation based on calculator results.
 **Results**: 
@@ -74,11 +74,63 @@ The server now generates responses based on the results from the calculator:
   - Returns a response with code 500 and an error message if the request is valid but the calculator returns an error.
   - Returns a response with code 200 if the request is valid but the result is missing. This ensures clear communication of the server's status to the client.
 
-### DZTVP-8
+### DZTVP-8 (08/03/2025)
 **Task**:
 Implement logging using `structlog`.
 **Results**: 
 Successfully set up a logging system for the Python server using the `structlog` library. The logging is organized and formatted for clarity, including:
   - Informative logs that are easy to read, with timestamps, log levels, and messages.
   - Implementation of JSON logging for easier monitoring and analysis, enhancing the server's observability and debugging capabilities.
+  
+### DZTVP-11 (19/03/2025)
+**Task**: 
+Implement a mathematical expression validator. 
+**Results**: 
+Successfully created the `MathExpressionValidator` class to check the validity of input mathematical expressions. The implementation includes:
+  - Validation of allowed characters to ensure only valid symbols are processed.
+  - Checking for balanced parentheses to prevent syntax errors in expressions.
+
+### DZTVP-12 (19/03/2025)
+**Task**: 
+Create a class for handling calculations in a separate thread. 
+**Results**:
+Implemented the `CalculationWorker` class to perform calculations in a separate thread. The class effectively handles:
+  - Successful and error responses from the server, ensuring smooth communication between threads.
+  - Use of signals to transmit data back to the main thread, enhancing the responsiveness of the application.
+
+### DZTVP-13 (19/03/2025)
+**Task**: 
+Develop the main application window. 
+**Results**: 
+Created the `CalculatorClient` class to represent the main application window. The implementation includes:
+  - A user-friendly interface with controls for inputting expressions, buttons for operations, and displays for results and error messages.
+  - Event handling for buttons and other controls, ensuring a responsive and interactive user experience.
+  
+![Finite State Machine](finite_state_machine_calc.jpg)
+
+##Finite State Machine for Calculator
+###States
+- **Initial State**: The initial state when the application is ready for input.
+- **Validating Expression**: The state where the application checks the entered mathematical expression.
+- **Error State**: The state where the application displays an error message.
+- **Sending Request to Server**: The state where the application sends a request to the server for calculation.
+- **Displaying Result**: The state where the application displays the result of the calculation.
+
+###Transitions
+**Initial State**:
+User enters expression → Transition to Validating Expression state.
+
+**Validating Expression*:
+Valid → Transition to Sending Request to Server state.
+Invalid → Transition to Error State.
+
+**Error State**:
+User corrects input → Transition back to Initial State.
+
+**Sending Request to Server**:
+Success → Transition to Displaying Result state.
+Error → Transition to Error State.
+
+**Displaying Result**:
+User requests new calculation → Transition back to Initial State.
 
