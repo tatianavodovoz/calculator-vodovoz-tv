@@ -1,211 +1,193 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import subprocess
-import json
+from aiohttp import web, WSMsgType
+import aiosqlite
+import asyncio
+import re
 import os
-import time
-import argparse
-from urllib.parse import urlparse, parse_qs
-import structlog
-import socket
+import json
+from pathlib import Path
+from datetime import datetime
+from asyncio import Lock, Semaphore
 
-# ==
-def configure_logging(json_logs: bool = False):
+DB_NAME = 'calculator.db'
+HISTORY_LIMIT = 1000
+MAX_WORKERS = 10
+REQUEST_TIMEOUT = 30
 
-    processors = [
-        structlog.contextvars.merge_contextvars,
-        structlog.processors.add_log_level,
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.TimeStamper(fmt="iso", utc=False),
-    ]
+class WebSocketManager:
+    def __init__(self):
+        self.active_connections = set()
+        self.history = []
+        self.lock = Lock()
+        self.queue = asyncio.Queue(maxsize=1000)
+        self.semaphore = Semaphore(MAX_WORKERS)
+        self.is_running = True
 
-    if json_logs:
-        processors.append(structlog.processors.JSONRenderer())
-    else:
-        processors.append(structlog.dev.ConsoleRenderer(colors=True))
+    async def process_queue(self):
+        while self.is_running:
+            async with self.semaphore:
+                try:
+                    client_ip, expression, mode = await self.queue.get()
+                    await self.process_task(client_ip, expression, mode)
+                except Exception as e:
+                    print(f"Queue processing error: {e}")
+                finally:
+                    self.queue.task_done()
 
-    structlog.configure(
-        processors=processors,
-        wrapper_class=structlog.BoundLogger,
-        context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
-        cache_logger_on_first_use=False,
-    )
-
-# ================================================
-# ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚Ñ‡Ð¸Ðº HTTP Ð·Ð°Ð¿Ñ€Ð¾Ñ�Ð¾Ð²
-# ================================================
-class CalculatorHandler(BaseHTTPRequestHandler):
-    def log_request(self, code='-', size='-'):
-        """ÐžÑ‚ÐºÐ»ÑŽÑ‡Ð°ÐµÐ¼ Ñ�Ñ‚Ð°Ð½Ð´Ð°Ñ€Ñ‚Ð½Ð¾Ðµ Ð»Ð¾Ð³Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ðµ BaseHTTPRequestHandler"""
-        pass
-
-    def _init_logger(self):
-        """Ð˜Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð°Ñ†Ð¸Ñ� Ð»Ð¾Ð³Ð³ÐµÑ€Ð° Ñ� ÐºÐ¾Ð½Ñ‚ÐµÐºÑ�Ñ‚Ð¾Ð¼"""
-        return structlog.get_logger().bind(
-            method=self.command,
-            path=self.path,
-            client_ip=self.client_address[0],
-            request_id=os.urandom(4).hex()
-        )
-
-    def _send_response(self, status: int, content: str = None):
-        """Ð£Ð½Ð¸Ð²ÐµÑ€Ñ�Ð°Ð»ÑŒÐ½Ñ‹Ð¹ Ð¼ÐµÑ‚Ð¾Ð´ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ¸ Ð¾Ñ‚Ð²ÐµÑ‚Ð¾Ð²"""
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.end_headers()
-        if content:
-            self.wfile.write(content.encode('utf-8'))
-
-    def do_GET(self):
-        """ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° GET Ð·Ð°Ð¿Ñ€Ð¾Ñ�Ð¾Ð²"""
-        logger = self._init_logger()
-        start_time = time.monotonic()
-        
+    async def process_task(self, client_ip, expression, mode):
         try:
-            if self.path == '/':
-                logger.info("Handling root request")
-                self._send_response(200, "Hello, World!")
-                logger.info(
-                    "Request completed",
-                    duration=time.monotonic() - start_time,
-                    status=200
+            result, error = await self.calculate(expression, mode)
+            async with self.lock:
+                await self.save_to_db(
+                    expression=expression,
+                    mode=mode,
+                    result=result,
+                    error=error,
+                    client_ip=client_ip
                 )
-            else:
-                logger.warning("Path not found")
-                self._send_response(404, "Page not found")
+                
+                self.history.append({
+                    'id': len(self.history) + 1,
+                    'timestamp': datetime.now().isoformat(),
+                    'expression': expression,
+                    'mode': mode,
+                    'result': result,
+                    'error': error,
+                    'client_ip': client_ip
+                })
+                
+                await self.broadcast_history()
                 
         except Exception as e:
-            logger.error(
-                "Request failed",
-                error=str(e),
-                exc_info=True
-            )
-            self._send_response(500, "Internal Server Error")
+            print(f"Task processing failed: {e}")
 
-    def do_POST(self):
-        
-        logger = self._init_logger()
-        start_time = time.monotonic()
-        
-        try:
-            # ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¿ÑƒÑ‚Ð¸
-            if not self.path.startswith('/calc'):
-                logger.warning("Invalid endpoint")
-                self._send_response(404, "Not Found")
-                return
-
-            logger.info("Starting calculation request")
-            
-            # ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Content-Type
-            if self.headers.get('Content-Type') != 'application/json':
-                logger.error("Invalid content type", 
-                           content_type=self.headers.get('Content-Type'))
-                self._send_response(400, "Invalid content type")
-                return
-
-            # Ð§Ñ‚ÐµÐ½Ð¸Ðµ Ñ‚ÐµÐ»Ð° Ð·Ð°Ð¿Ñ€Ð¾Ñ�Ð°
-            content_length = int(self.headers.get('Content-Length', 0))
-            raw_body = self.rfile.read(content_length)
-            
-            # ÐŸÐ°Ñ€Ñ�Ð¸Ð½Ð³ JSON
-            try:
-                expression = json.loads(raw_body)
-                if not isinstance(expression, str):
-                    raise ValueError("Expression must be a string")
-            except Exception as e:
-                logger.error("Invalid request body", error=str(e))
-                self._send_response(400, "Invalid request format")
-                return
-
-            # ÐŸÐ°Ñ€Ñ�Ð¸Ð½Ð³ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ð¾Ð²
-            query_params = parse_qs(urlparse(self.path).query)
-            float_mode = query_params.get('float', ['false'])[0].lower() in ['true', '1', 'yes']
-            mode = 'float' if float_mode else 'int'
-
-            # ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð´Ð¾Ñ�Ñ‚ÑƒÐ¿Ð½Ð¾Ñ�Ñ‚Ð¸ ÐºÐ°Ð»ÑŒÐºÑƒÐ»Ñ�Ñ‚Ð¾Ñ€Ð°
-            app_path = os.path.abspath(os.path.join('build', 'app.exe'))
-            if not os.path.exists(app_path):
-                logger.critical("Calculator binary missing")
-                self._send_response(500, "Service unavailable")
-                return
-
-            # Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ Ð²Ñ‹Ñ‡Ð¸Ñ�Ð»ÐµÐ½Ð¸Ð¹
-            try:
-                result = subprocess.run(
-                    [app_path, mode, expression],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-            except subprocess.TimeoutExpired:
-                logger.error("Calculation timeout")
-                self._send_response(504, "Gateway Timeout")
-                return
-
-            
-            if result.returncode != 0:
-                error_msg = result.stderr.strip() or "Calculation failed"
-                logger.error(
-                    "Calculation error",
-                    exit_code=result.returncode,
-                    error=error_msg
-                )
-                self._send_response(500, error_msg)
-                return
-
-            if not result.stdout.strip():
-                logger.error("Empty result")
-                self._send_response(500, "No result produced")
-                return
-
-           
-            logger.info(
-                "Calculation successful",
-                duration=time.monotonic() - start_time,
-                expression=expression,
-                result=result.stdout.strip()
-            )
-            self._send_response(200, json.dumps(result.stdout.strip()))
-
-        except Exception as e:
-            logger.error(
-                "Unexpected error",
-                error=str(e),
-                exc_info=True
-            )
-            self._send_response(500, "Internal Server Error")
-
-
-def run_server(host: str = '0.0.0.0', port: int = 8000, json_logs: bool = False):
-    
-    configure_logging(json_logs)
-    server_address = (host, port)
-    httpd = HTTPServer(server_address, CalculatorHandler)
-    
-    logger = structlog.get_logger()
-    try:
-        logger.info(
-            "Starting server",
-            host=host,
-            port=port,
-            log_format="JSON" if json_logs else "CONSOLE"
+    async def calculate(self, expression, mode):
+        proc = await asyncio.create_subprocess_exec(
+            'build/app.exe',
+            mode,
+            expression,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        logger.info("Server stopped")
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+            return stdout.decode().strip(), stderr.decode().strip()
+        except asyncio.TimeoutError:
+            return None, "Calculation timeout"
+
+    async def save_to_db(self, **data):
+        async with aiosqlite.connect(DB_NAME) as db:
+            await db.execute('''
+                INSERT INTO history 
+                (expression, mode, result, error, client_ip, timestamp)
+                VALUES (?,?,?,?,?,?)
+            ''', (
+                data['expression'],
+                data['mode'],
+                data['result'],
+                data['error'],
+                data['client_ip'],
+                datetime.now().isoformat()
+            ))
+            await db.commit()
+
+    async def broadcast_history(self):
+        try:
+            message = json.dumps({
+                'type': 'history_update',
+                'data': self.history[-100:]  # Отправляем последние 100 записей
+            })
+            
+            dead_connections = []
+            for ws in self.active_connections.copy():
+                try:
+                    await ws.send_str(message)
+                except ConnectionResetError:
+                    dead_connections.append(ws)
+            
+            for ws in dead_connections:
+                self.active_connections.remove(ws)
+                
+        except Exception as e:
+            print(f"Broadcast failed: {e}")
+
+    async def shutdown(self):
+        self.is_running = False
+        await self.queue.join()
+        for ws in self.active_connections:
+            await ws.close()
+
+async def init_db():
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,timestamp DATETIME NOT NULL,
+                expression TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                result TEXT,
+                error TEXT,
+                client_ip TEXT NOT NULL
+            )
+        ''')
+        await db.commit()
+
+async def websocket_handler(request):
+    ws = web.WebSocketResponse(timeout=REQUEST_TIMEOUT)
+    await ws.prepare(request)
+    
+    manager = request.app['ws_manager']
+    client_ip = request.transport.get_extra_info('peername')[0]
+    
+    async with manager.lock:
+        manager.active_connections.add(ws)
+        try:
+            await ws.send_json({
+                'type': 'full_history',
+                'data': manager.history[-100:]
+            })
+        except ConnectionResetError:
+            manager.active_connections.remove(ws)
+            return ws
+
+    try:
+        async for msg in ws:
+            if msg.type == WSMsgType.TEXT:
+                data = json.loads(msg.data)
+                if data['type'] == 'new_expression':
+                    await manager.queue.put((
+                        client_ip,
+                        data['expression'],
+                        data.get('mode', 'int')
+                    ))
     except Exception as e:
-        logger.critical("Server crashed", error=str(e))
-        raise
+        print(f"WebSocket error: {e}")
+    finally:
+        async with manager.lock:
+            manager.active_connections.discard(ws)
+            
+    return ws
+
+async def start_background_tasks(app):
+    await init_db()
+    asyncio.create_task(app['ws_manager'].process_queue())
+
+async def on_shutdown(app):
+    await app['ws_manager'].shutdown()
+
+def main():
+    app = web.Application()
+    app['ws_manager'] = WebSocketManager()
+    
+    app.on_startup.append(start_background_tasks)
+    app.on_shutdown.append(on_shutdown)
+    
+    app.router.add_get('/ws', websocket_handler)
+    
+    web.run_app(
+        app,
+        port=8000,
+        handle_signals=True,
+        reuse_port=True
+    )
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Calculator HTTP Server')
-    parser.add_argument('--host', type=str, default='0.0.0.0', help='Server host')
-    parser.add_argument('--port', type=int, default=8000, help='Server port')
-    parser.add_argument('--json-logs', action='store_true', help='Enable JSON logging')
-    args = parser.parse_args()
-
-    run_server(
-        host=args.host,
-        port=args.port,
-        json_logs=args.json_logs
-    )
+    main()

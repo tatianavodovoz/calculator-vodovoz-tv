@@ -1,6 +1,7 @@
 *.o
 *.out
 *.exe
+*.db
 
 build/
 googletest/
