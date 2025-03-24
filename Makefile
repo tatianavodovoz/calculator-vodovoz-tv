@@ -21,7 +21,6 @@ TEST_OBJ = $(BUILD_DIR)/tests.o $(BUILD_DIR)/calculator.o
 TEST_EXE = $(BUILD_DIR)/unit-tests.exe
 
 # GoogleTest files
-
 GTEST_DIR := googletest/googletest
 GTEST_SRC_DIR := $(GTEST_DIR)/src
 GTEST_HEADERS := $(GTEST_DIR)/include/gtest/*.h $(GTEST_DIR)/include/gtest/internal/*.h
@@ -42,7 +41,11 @@ PIP = $(VENV)/bin/pip
 INT_TEST_DIR = tests/integration
 INT_TESTS = $(INT_TEST_DIR)/tests.py
 
-.PHONY: all clean run-app run-unit-test format venv run-integration-tests
+# Python server/client
+SERVER_SCRIPT = server.py
+CLIENT_SCRIPT = client.py
+
+.PHONY: all clean run-app run-unit-test format venv run-integration-tests run-server run-client
 
 all: $(APP_EXE) $(TEST_EXE)
 
@@ -58,8 +61,6 @@ $(BUILD_DIR)/main.o: $(SRC_DIR)/main.c
 $(BUILD_DIR)/calculator.o: $(SRC_DIR)/calculator.c
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
-
-
 
 # Сборка Google Test
 $(GTEST_ALL_OBJ): $(GTEST_SRC_DIR)/gtest-all.cc $(GTEST_HEADERS)
@@ -77,7 +78,7 @@ $(GTEST_MAIN_A): $(GTEST_ALL_OBJ) $(GTEST_MAIN_OBJ)
 	ar rcs $@ $^
 
 # Build unit tests
-$(TEST_EXE): $(TEST_OBJ) $(GTEST_LIB)
+$(TEST_EXE): $(TEST_OBJ) $(GTEST_MAIN_A)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(TEST_LDFLAGS) $(LDFLAGS)
 
@@ -99,16 +100,25 @@ run-unit-test: $(TEST_EXE)
 
 format:
 	@find $(FORMAT_DIRS) -type f \( \
-		-name "*.cpp" -o \
-		-name "*.c" -o \
-		-name "*.h" \
+	-name "*.cpp" -o \
+	-name "*.c" -o \
+	-name "*.h" \
 	\) -exec $(CLANG_FORMAT) -i -style=file {} +
 
-$(VENV):
+$(VENV):requirements.txt
 	@python3 -m venv $(VENV)
 	@$(PIP) install --upgrade pip
-	@$(PIP) list | grep -q pytest || $(PIP) install pytest
+	@$(PIP) install -r requirements.txt
 
 run-integration-tests: $(VENV) $(APP_EXE)
-	@. venv/bin/activate
-	@pytest $(INT_TESTS)
+	@. $(VENV)/bin/activate && pytest $(INT_TESTS)
+
+run-server: $(VENV)
+	@$(PYTHON) $(SERVER_SCRIPT)
+
+run-client: $(VENV)
+	@$(PYTHON) $(CLIENT_SCRIPT)
+
+run-app: $(APP_EXE)
+	@echo "Running application..."
+	@./$(APP_EXE)
