@@ -47,7 +47,7 @@ CLIENT_SCRIPT = client.py
 
 .PHONY: all clean run-app run-unit-test format venv run-integration-tests run-server run-client
 
-all: $(APP_EXE) $(TEST_EXE)
+all: $(APP_EXE)
 
 # Build application
 $(APP_EXE): $(APP_OBJ)
