@@ -8,7 +8,7 @@ The application supports the following operators for integer calculations: +, -,
 ## How to Run/Use It
 
 **Operating System:**  
-Ubuntu version 22 or higher.
+Ubuntu version 22 or higher.  
 **Python Version:**  
 Python version 3.10 or higher.
 
@@ -37,9 +37,7 @@ To start the client, you should open **new** terminal and use the following comm
 ```bash
    make run-client
 ```
-__You can run more than one client. Just open new terminal for each new client.__
-
-
+You can run more than one client. Just open new terminal for each new client.
 
 ## How It's Made
 
@@ -144,7 +142,6 @@ Developed a database using aiosqlite that stores all calculations, including exp
 Modify the server to be asynchronous and implement a WebSocket mechanism.  
 **Results:**  
 The server was rewritten to be asynchronous using aiohttp. Configured WebSocket connections to automatically send calculation history to clients, ensuring data relevance.
-
 
 ### DZTVP-17 (24/03/25)
 **Task:**  
